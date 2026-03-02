@@ -1,0 +1,16 @@
+Key Result :
+- Successfully Develop at least 1 Project Using Python Data Analytics (case studies: Auto Tagging Ticket Support System)
+    Action Plan : 
+            - Project Plan Documentation (Objectives, Scope, business flow, Train Models, tools, etc)
+			- Development project (User Interface Dashboard & Backend)
+			- Deploy the Project
+
+Key Result :
+            Succesfully Deploy Simple Machine Learning Model Using Python Libraries on GCP
+    Action Plan : 
+            - Define project objectives & develop a simple machine learning model using Python libraries (case studies: Auto Tagging Ticket Support System)
+			- Prepare the model for deployment
+			- Setup a GCP Project
+			- Deploy the model to GCP
+			- Test and validate the deployment
+			- Implement monitoring tools

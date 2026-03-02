@@ -1,0 +1,78 @@
+# GCP Cloud Build configuration
+# Builds Docker image, pushes to Artifact Registry, deploys to Cloud Run
+#
+# Usage:
+#   gcloud builds submit --config cloudbuild.yaml
+#
+# Required substitution variables (set in Cloud Build trigger or --substitutions flag):
+#   _PROJECT_ID   — GCP project ID
+#   _REGION       — GCP region (default: asia-southeast1)
+#   _SERVICE_NAME — Cloud Run service name (default: ticket-tagger)
+#   _REPO_NAME    — Artifact Registry repo name (default: ticket-support-repo)
+
+substitutions:
+  _PROJECT_ID: "${PROJECT_ID}"
+  _REGION: "asia-southeast1"
+  _SERVICE_NAME: "ticket-tagger"
+  _REPO_NAME: "ticket-support-repo"
+  _IMAGE_NAME: "${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}"
+
+steps:
+  # Step 1: Build Docker image
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build"
+    args:
+      - "build"
+      - "-t"
+      - "${_IMAGE_NAME}:${SHORT_SHA}"
+      - "-t"
+      - "${_IMAGE_NAME}:latest"
+      - "."
+    waitFor: ["-"]
+
+  # Step 2: Push image to Artifact Registry
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-sha"
+    args:
+      - "push"
+      - "${_IMAGE_NAME}:${SHORT_SHA}"
+    waitFor: ["build"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-latest"
+    args:
+      - "push"
+      - "${_IMAGE_NAME}:latest"
+    waitFor: ["build"]
+
+  # Step 3: Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE_NAME}"
+      - "--image=${_IMAGE_NAME}:${SHORT_SHA}"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+      - "--memory=1Gi"
+      - "--cpu=1"
+      - "--min-instances=0"
+      - "--max-instances=3"
+      - "--port=8080"
+      - "--set-env-vars=APP_ENV=production"
+    waitFor: ["push-sha"]
+
+# Store the built image in Artifact Registry
+images:
+  - "${_IMAGE_NAME}:${SHORT_SHA}"
+  - "${_IMAGE_NAME}:latest"
+
+# Build timeout (20 minutes)
+timeout: "1200s"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: "E2_MEDIUM"
