@@ -90,7 +90,6 @@ def train(use_csv: bool = False):
         ("tfidf", build_tfidf_vectorizer(max_features=10_000, ngram_range=(1, 2))),
         ("clf", LogisticRegression(
             solver="lbfgs",
-            multi_class="auto",
             max_iter=1000,
             C=1.0,
             random_state=42,

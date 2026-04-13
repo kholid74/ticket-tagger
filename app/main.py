@@ -121,7 +121,7 @@ with st.sidebar:
 
     tab_selected = st.radio(
         "Navigation",
-        ["🏠 Home", "🎯 Auto-Tag Demo", "📊 EDA Explorer", "📈 Model Performance"],
+        ["🏠 Home", "🎯 Auto-Tag Demo", "🤖 AI Reply Suggester", "📊 EDA Explorer", "📈 Model Performance"],
         label_visibility="collapsed",
     )
 
@@ -134,6 +134,8 @@ with st.sidebar:
     st.markdown(f"{'✅' if model_loaded else '❌'} Model {'loaded' if model_loaded else 'not found'}")
     st.markdown(f"{'✅' if data_loaded else '⚠️'} Dataset {'available' if data_loaded else 'not found'}")
     st.markdown(f"{'✅' if metrics_loaded else '⚠️'} Metrics {'available' if metrics_loaded else 'not found'}")
+    gemini_configured = bool(os.environ.get("GEMINI_API_KEY", ""))
+    st.markdown(f"{'✅' if gemini_configured else '⚠️'} Gemini API {'configured' if gemini_configured else 'not set'}")
 
     if not model_loaded:
         st.warning("Run `python src/train.py` to train the model first.")
@@ -372,7 +374,124 @@ elif tab_selected == "🎯 Auto-Tag Demo":
 
 
 # ══════════════════════════════════════════════════════════════════
-# TAB 3 — EDA EXPLORER
+# TAB 3 — AI REPLY SUGGESTER
+# ══════════════════════════════════════════════════════════════════
+elif tab_selected == "🤖 AI Reply Suggester":
+    st.title("🤖 AI Reply Suggester")
+    st.markdown(
+        "Paste a customer support ticket — the system will **auto-tag** it, "
+        "then use **Gemini AI** to draft a professional reply for the support agent."
+    )
+
+    if load_model() is None:
+        st.error("Model not found. Run `python src/train.py` first.")
+        st.stop()
+
+    # ── Gemini setup ──────────────────────────────────────────────
+    gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not gemini_api_key:
+        st.warning(
+            "GEMINI_API_KEY not set. "
+            "Get your key at https://aistudio.google.com/app/apikey, "
+            "then set it as an environment variable or in Cloud Run."
+        )
+        st.stop()
+
+    @st.cache_resource(show_spinner=False)
+    def get_gemini_client():
+        import google.generativeai as genai
+        genai.configure(api_key=gemini_api_key)
+        return genai.GenerativeModel("gemini-2.5-flash")
+
+    def generate_reply(ticket_text: str, tag: str, confidence: float) -> str:
+        model_gemini = get_gemini_client()
+        prompt = f"""You are a professional and empathetic customer support agent.
+
+A customer submitted the following support ticket, which has been automatically classified as: **{tag}** (confidence: {confidence:.0%}).
+
+Customer Ticket:
+\"\"\"
+{ticket_text}
+\"\"\"
+
+Write a concise, professional, and empathetic reply to this customer. The reply should:
+1. Acknowledge the customer's issue
+2. Provide a helpful response or next steps based on the '{tag}' category
+3. Be polite and solution-oriented
+4. Be between 3-5 sentences
+
+Reply only with the email body — no subject line, no greeting like "Dear Customer", start directly with the response."""
+
+        response = model_gemini.generate_content(prompt)
+        return response.text.strip()
+
+    # ── Sample tickets ─────────────────────────────────────────────
+    sample_options = {
+        "Technical Issue": "My laptop screen keeps flickering and sometimes goes completely black during video calls.",
+        "Billing": "I was charged twice for my subscription this month. Please reverse the duplicate charge.",
+        "Account": "I cannot log into my account. The password reset email is not arriving in my inbox.",
+        "Shipping": "My order was supposed to be delivered 3 days ago but the tracking shows it's still in transit.",
+        "Cancellation": "I want to cancel my subscription effective immediately and get a prorated refund.",
+        "Custom": "",
+    }
+
+    col1, _ = st.columns([1, 2])
+    with col1:
+        sample_choice = st.selectbox("Load a sample ticket:", list(sample_options.keys()), key="ai_sample")
+
+    ticket_text = sample_options[sample_choice] if sample_choice != "Custom" else ""
+
+    ticket_input = st.text_area(
+        "Customer Ticket:",
+        value=ticket_text,
+        height=130,
+        placeholder="Paste the customer support ticket here...",
+    )
+
+    generate_btn = st.button("✨ Auto-Tag & Generate Reply", type="primary", use_container_width=True)
+
+    if generate_btn and ticket_input.strip():
+        with st.spinner("Analyzing ticket and generating reply..."):
+            result = predict(ticket_input)
+
+            if result:
+                col1, col2 = st.columns(2)
+                with col1:
+                    confidence_pct = result["confidence"] * 100
+                    color = "🟢" if confidence_pct >= 80 else ("🟡" if confidence_pct >= 60 else "🔴")
+                    st.metric("Auto-Tag", result["tag"])
+                    st.metric("Confidence", f"{color} {confidence_pct:.1f}%")
+
+                with col2:
+                    scores = dict(sorted(result["all_scores"].items(), key=lambda x: x[1], reverse=True))
+                    fig = px.bar(
+                        x=list(scores.values()),
+                        y=list(scores.keys()),
+                        orientation="h",
+                        labels={"x": "Score", "y": "Category"},
+                        color=list(scores.values()),
+                        color_continuous_scale="RdYlGn",
+                        range_color=[0, 1],
+                    )
+                    fig.update_layout(height=220, coloraxis_showscale=False, margin=dict(t=10, b=10))
+                    st.plotly_chart(fig, use_container_width=True)
+
+                st.divider()
+                st.subheader("Suggested Reply")
+
+                try:
+                    reply = generate_reply(ticket_input, result["tag"], result["confidence"])
+                    st.text_area("Draft Reply (editable):", value=reply, height=180, key="reply_output")
+                    st.caption("This reply was generated by Gemini AI. Always review before sending to the customer.")
+                except Exception as e:
+                    st.error(f"Failed to generate reply: {e}")
+
+    elif generate_btn:
+        st.warning("Please enter a ticket text first.")
+
+
+# ══════════════════════════════════════════════════════════════════
+# TAB 4 — EDA EXPLORER
 # ══════════════════════════════════════════════════════════════════
 elif tab_selected == "📊 EDA Explorer":
     st.title("📊 EDA Explorer")

@@ -11,3 +11,4 @@ python-dotenv>=1.0
 kaggle>=1.6
 huggingface_hub>=0.20
 pyarrow>=12.0
+google-generativeai>=0.7

@@ -24,6 +24,9 @@ nltk.download('punkt_tab', quiet=True)"
 # Copy application code
 COPY . .
 
+# Train model and bake into image
+RUN python src/train.py
+
 # Expose Cloud Run port
 EXPOSE 8080
 
